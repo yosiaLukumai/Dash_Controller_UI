@@ -3,13 +3,14 @@ import { useEffect, useState } from 'react'
 import { io, Socket } from "socket.io-client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
-import { Home, LineChart, LogOut, Thermometer, Droplets, FlaskRound, Zap, Download } from 'lucide-react'
+import { Home, LineChart, LogOut, Thermometer, Droplet, Droplets, FlaskRound, Zap, Download, Flame, ShowerHeadIcon as Shower, Cog } from 'lucide-react'
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { useUser } from '@/contexts/userContext'
 import { useNavigate } from 'react-router-dom'
 import config from '@/config'
 import { useToast } from '@/hooks/use-toast'
 import LoaderApp from '../Loader'
+import { Switch } from "@/components/ui/switch"
 
 interface SensorCardProps {
     icon: React.ElementType;
@@ -62,6 +63,13 @@ interface DataObject {
     data: Data;
 }
 
+interface StatusMachine {
+    sprinkler: boolean;
+    motor: boolean;
+    pump: boolean;
+    machine: string;
+}
+
 
 interface LogData {
     time: string;
@@ -82,6 +90,10 @@ export default function Dashboard() {
     const [machineData, setMachineData] = useState<DataObject | null>(null)
     const [thereChanges, setThereChanges] = useState<LogData | null>(null)
     const [socket, setSocket] = useState<Socket | null>(null);
+    const [motorOn, setmotorOn] = useState(false)
+    const [pumpOn, setpumpOn] = useState(false)
+    const [sprinklerOn, setsprinklerOn] = useState(false)
+    // const [machineStatusOb, setMachineStatusOj] = useState<StatusMachine | null>(null)
 
 
     const handleExport = async () => {
@@ -104,7 +116,7 @@ export default function Dashboard() {
                 link.href = url;
 
                 // Set the download attribute with a filename
-                link.download = `machineData-${new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "numeric"})}.pdf`; // Replace with appropriate filename
+                link.download = `machineData-${new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "numeric" })}.pdf`; // Replace with appropriate filename
 
                 // Append the link to the document, click it, and remove it
                 document.body.appendChild(link);
@@ -198,8 +210,8 @@ export default function Dashboard() {
                 // let update the workingGraphData
                 let NewLogData: LogData = {
                     humidity: NewData.data.humidity,
-                    temperature:NewData.data.temperature,
-                    time:new Date(data.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+                    temperature: NewData.data.temperature,
+                    time: new Date(data.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
                 }
                 setThereChanges(NewLogData)
 
@@ -207,7 +219,18 @@ export default function Dashboard() {
 
         };
 
+        const handleMachineStatus = (data: any) => {
+            const NewData: StatusMachine = JSON.parse(data)
+            if (NewData.machine == user?.machineId) {
+                //    setMachineStatusOj(NewData)
+                setpumpOn(NewData.pump)
+                setsprinklerOn(NewData.sprinkler)
+                setmotorOn(NewData.motor)
+            }
+        };
+
         socketInstance.on("newdata", handleCriticalNotification);
+        socketInstance.on("new/config/machine", handleMachineStatus)
         socketInstance.on("connect", () => {
             console.log("connected....", socketInstance.id);
 
@@ -216,19 +239,20 @@ export default function Dashboard() {
 
         return () => {
             socketInstance.off("newdata", handleCriticalNotification);
+            socketInstance.off("new/config/machine", handleMachineStatus)
             socketInstance.disconnect();
         };
     }, []);
 
 
-    useEffect(()=> {
-        
-        if(thereChanges && workingGraphData) {
+    useEffect(() => {
+
+        if (thereChanges && workingGraphData) {
             let PreviousData = workingGraphData ? [...workingGraphData, thereChanges] : [thereChanges];
-                if (PreviousData.length > 6) {
-                    PreviousData.shift(); 
-                    setworkingGraphData(PreviousData)
-                }
+            if (PreviousData.length > 6) {
+                PreviousData.shift();
+                setworkingGraphData(PreviousData)
+            }
         }
     }, [thereChanges])
 
@@ -248,11 +272,30 @@ export default function Dashboard() {
                 "new/config",
                 JSON.stringify({ temperature, humidity, machineId: user?.machineId })
             );
-        }, 4000); 
-    
+        }, 4000);
+
         return () => clearTimeout(debounceTimer);
 
     }, [temperature, humidity])
+
+
+    useEffect(() => {
+        const socketInstance = socket;
+
+        if (!socketInstance) return
+        if (!user?.machineId) return
+
+
+        let NewSettingsMachine: StatusMachine = {
+            motor: motorOn,
+            pump: pumpOn,
+            sprinkler: sprinklerOn,
+            machine: user?.machineId
+        }
+
+        socketInstance.emit("new/config/machine", JSON.stringify(NewSettingsMachine));
+
+    }, [pumpOn, motorOn, sprinklerOn])
 
 
 
@@ -276,12 +319,12 @@ export default function Dashboard() {
                                         max={100}
                                         color="from-red-500 to-orange-500"
                                         onChange={(v) => {
-                                            setMachineData((prev) => 
+                                            setMachineData((prev) =>
                                                 prev ? { ...prev, data: { ...prev.data, temperature: v } } : null
                                             )
                                             setTemperature(v)
                                         }
-                                  
+
                                         }
                                         showSlider
                                     />
@@ -294,7 +337,7 @@ export default function Dashboard() {
                                         max={100}
                                         color="from-blue-500 to-cyan-500"
                                         onChange={(v) => {
-                                            setMachineData((prev) => 
+                                            setMachineData((prev) =>
                                                 prev ? { ...prev, data: { ...prev.data, humidity: v } } : null
                                             )
                                             setHumidity(v)
@@ -332,14 +375,60 @@ export default function Dashboard() {
 
                     </div>
                 );
+
             case "sensors":
                 return (
                     <Card className="bg-gray-800">
                         <CardHeader>
-                            <CardTitle className="text-blue-300">Sensor Details</CardTitle>
+                            <CardTitle className="text-2xl font-bold text-blue-300">Machine Controls</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <p className="text-gray-300">Detailed sensor information and configuration options would go here.</p>
+                            <div className="grid grid-cols-10 gap-6">
+                                <div className="col-span-7 space-y-6">
+                                    <div className="bg-gray-700 p-3 rounded-lg flex flex-col items-center justify-between">
+                                        <div className="bg-blue-500 p-4 rounded-full mb-4">
+                                            <Droplet className="h-12 w-12 text-white" />
+                                        </div>
+                                        <Switch
+                                            id="motor-switch"
+                                            checked={motorOn}
+                                            onCheckedChange={setmotorOn}
+                                            className="data-[state=checked]:bg-blue-500 switch-large"
+                                        />
+                                        <div className="text-sm text-gray-400 mt-2">
+                                            Motor
+                                        </div>
+                                    </div>
+                                    <div className="bg-gray-700 p-6 rounded-lg flex flex-col items-center justify-between">
+                                        <div className="bg-red-500 p-4 rounded-full mb-4">
+                                            <Flame className="h-12 w-12 text-white" />
+                                        </div>
+                                        <Switch
+                                            id="pump-switch"
+                                            checked={pumpOn}
+                                            onCheckedChange={setpumpOn}
+                                            className="data-[state=checked]:bg-red-500 switch-large"
+                                        />
+                                        <div className="text-sm text-gray-400 mt-2">
+                                            motor
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="col-span-3 bg-gray-700 p-6 rounded-lg flex flex-col items-center justify-center">
+                                    <div className="bg-green-500 p-4 rounded-full mb-4">
+                                        <Shower className="h-12 w-12 text-white" />
+                                    </div>
+                                    <Switch
+                                        id="sprinkler-switch"
+                                        checked={sprinklerOn}
+                                        onCheckedChange={setsprinklerOn}
+                                        className="data-[state=checked]:bg-green-500"
+                                    />
+                                    <div className="text-sm text-gray-400 mt-2">
+                                        Sprinkler
+                                    </div>
+                                </div>
+                            </div>
                         </CardContent>
                     </Card>
                 );
@@ -405,6 +494,12 @@ export default function Dashboard() {
                             onClick={() => setActiveTab('analytics')}
                         >
                             <LineChart color='white' className="w-6 h-6" />
+                        </button>
+                        <button
+                            className={`p-2 rounded-lg transition-colors ${activeTab === 'sensors' ? 'bg-blue-600' : 'hover:bg-blue-600'}`}
+                            onClick={() => setActiveTab('sensors')}
+                        >
+                            <Cog color='white' className="w-6 h-6" />
                         </button>
                         <button
                             className="p-2 hover:bg-blue-600 rounded-lg transition-colors"
