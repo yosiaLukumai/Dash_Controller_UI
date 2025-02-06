@@ -11,6 +11,7 @@ import config from '@/config'
 import { useToast } from '@/hooks/use-toast'
 import LoaderApp from '../Loader'
 import { Switch } from "@/components/ui/switch"
+// import { set } from 'date-fns'
 
 interface SensorCardProps {
     icon: React.ElementType;
@@ -22,9 +23,52 @@ interface SensorCardProps {
     min?: number;
     max?: number;
     onChange?: (value: number) => void;
+    setedTemperature?: number;
+    setedHumidity?: number;
 }
 
-const SensorCard = ({ icon: Icon, title, value, unit, color, showSlider = false, min = 0, max = 100, onChange }: SensorCardProps) => (
+// const SensorCard = ({ icon: Icon, title, value, unit, color, showSlider = false, min = 0, max = 100,  onChange, setedTemperature, setedHumidity }: SensorCardProps) => (
+//     <Card className={`bg-gradient-to-br ${color} hover:shadow-lg transition-all duration-300`}>
+//         <CardHeader className="flex flex-row items-center justify-between pb-2">
+//             <CardTitle className="text-sm font-medium text-white">{title}</CardTitle>
+//             <Icon className="h-4 w-4 text-white" />
+//         </CardHeader>
+//         <CardContent>
+//             <div className="text-2xl font-bold text-white mb-2">
+//                 {value.toFixed(2)}
+//                 {(title=="Temperature" || title == "Humidity") && <span className="ml-1  text-2xl font-bold">  / {setedHumidity || setedHumidity} </span>}
+//                 <span className="ml-1 text-sm font-normal">{unit}</span>
+//             </div>
+//             {showSlider && onChange && (
+//                 <Slider
+//                     min={min}
+//                     max={max}
+//                     step={0.01}
+//                     value={[title === "Temperature" ? (setedTemperature ? setedTemperature: 0)  : (setedHumidity ? setedHumidity : 0)]}
+//                     // value={[ title=="Temperature" ?  (setedTemperature ? setedTemperature: 0 ) :  (setedHumidity ? setedHumidity : 0)]}
+//                     // onValueChange={([newValue]) => onChange(newValue)}
+//                     onValueChange={([newValue]) => onChange(newValue)}
+
+//                     className="w-full"
+//                 />
+//             )}
+//         </CardContent>
+//     </Card>
+// )
+
+const SensorCard = ({ 
+    icon: Icon, 
+    title, 
+    value, 
+    unit, 
+    color, 
+    showSlider = false, 
+    min = 0, 
+    max = 100,  
+    onChange, 
+    setedTemperature, 
+    setedHumidity 
+}: SensorCardProps) => (
     <Card className={`bg-gradient-to-br ${color} hover:shadow-lg transition-all duration-300`}>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-white">{title}</CardTitle>
@@ -32,21 +76,29 @@ const SensorCard = ({ icon: Icon, title, value, unit, color, showSlider = false,
         </CardHeader>
         <CardContent>
             <div className="text-2xl font-bold text-white mb-2">
-                {value.toFixed(2)}<span className="ml-1 text-sm font-normal">{unit}</span>
+                {value.toFixed(2)}
+                {(title === "Temperature" || title === "Humidity") && (
+                    <span className="ml-1 text-2xl font-bold">
+                        / {title === "Temperature" ? setedTemperature : setedHumidity}
+                    </span>
+                )}
+                <span className="ml-1 text-sm font-normal">{unit}</span>
             </div>
             {showSlider && onChange && (
                 <Slider
                     min={min}
                     max={max}
                     step={0.01}
-                    value={[value]}
+                    // value={[title === "Temperature" ? setedTemperature : setedHumidity]}
+                    value={[title === "Temperature" ? (setedTemperature ? setedTemperature: 0)  : (setedHumidity ? setedHumidity : 0)]}
                     onValueChange={([newValue]) => onChange(newValue)}
                     className="w-full"
                 />
             )}
         </CardContent>
     </Card>
-)
+);
+
 
 interface Data {
     K: number;
@@ -56,6 +108,8 @@ interface Data {
     pH: number;
     humidity: number;
     temperature: number;
+    setedHumidity?: number;
+    setedTemperature?: number;
 }
 
 interface DataObject {
@@ -82,6 +136,8 @@ interface LogData {
 export default function Dashboard() {
     const [activeTab, setActiveTab] = useState("overview")
     const [temperature, setTemperature] = useState(84)
+    const [setedHumidity, setSetedHumidity] = useState(37)
+    const [setedTemperature, setSetedTemperature] = useState(84)
     const [humidity, setHumidity] = useState(37)
     const { setUser, user } = useUser()
     const { toast } = useToast()
@@ -149,6 +205,7 @@ export default function Dashboard() {
                 if (data.success) {
 
                     if (data.body) {
+                        
                         setMachineData(data.body)
                     }
                 } else {
@@ -206,6 +263,8 @@ export default function Dashboard() {
         const handleCriticalNotification = (data: any) => {
             const NewData: DataObject = JSON.parse(data)
             if (NewData.machine == user?.machineId) {
+                setTemperature(NewData.data.temperature)
+                setHumidity(NewData.data.humidity)
                 setMachineData(NewData)
                 // let update the workingGraphData
                 let NewLogData: LogData = {
@@ -268,20 +327,20 @@ export default function Dashboard() {
         if (!socketInstance) return
 
         const debounceTimer = setTimeout(() => {
+            
             socketInstance.emit(
                 "new/config",
-                JSON.stringify({ temperature, humidity, machineId: user?.machineId })
+                JSON.stringify({  temperature: setedTemperature, humidity: setedHumidity, machineId: user?.machineId })
             );
         }, 4000);
 
         return () => clearTimeout(debounceTimer);
 
-    }, [temperature, humidity])
+    }, [setedTemperature, setedHumidity])
 
 
     useEffect(() => {
         const socketInstance = socket;
-
         if (!socketInstance) return
         if (!user?.machineId) return
 
@@ -313,36 +372,42 @@ export default function Dashboard() {
                                     <SensorCard
                                         icon={Thermometer}
                                         title="Temperature"
-                                        value={machineData.data.temperature}
+                                        value={temperature}
                                         unit="°C"
                                         min={0}
                                         max={100}
                                         color="from-red-500 to-orange-500"
+
+                                        
+                                        // onChange={(v) => setSetedTemperature(v)}
+                                        setedTemperature={machineData.data.setedTemperature}
                                         onChange={(v) => {
                                             setMachineData((prev) =>
-                                                prev ? { ...prev, data: { ...prev.data, temperature: v } } : null
+                                                prev ? { ...prev, data: { ...prev.data, setedTemperature: v } } : null
                                             )
-                                            setTemperature(v)
-                                        }
-
-                                        }
+                                            setSetedTemperature(v)
+                                        }}
+                                        // setedTemperature={setedTemperature}
+                                        
                                         showSlider
                                     />
                                     <SensorCard
                                         icon={Droplets}
                                         title="Humidity"
-                                        value={machineData.data.humidity}
+                                        value={humidity}
                                         unit="%"
                                         min={0}
                                         max={100}
                                         color="from-blue-500 to-cyan-500"
                                         onChange={(v) => {
                                             setMachineData((prev) =>
-                                                prev ? { ...prev, data: { ...prev.data, humidity: v } } : null
+                                                prev ? { ...prev, data: { ...prev.data, setedHumidity: v } } : null
                                             )
-                                            setHumidity(v)
+                                            setSetedHumidity(v)
                                         }
                                         }
+                                        // onChange={(v) => setSetedHumidity(v)}
+                                        setedHumidity={setedHumidity}
                                         showSlider
                                     />
                                 </div>
