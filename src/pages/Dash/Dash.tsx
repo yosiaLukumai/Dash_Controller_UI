@@ -266,7 +266,6 @@ export default function Dashboard() {
                 setTemperature(NewData.data.temperature)
                 setHumidity(NewData.data.humidity)
                 setMachineData(NewData)
-                // let update the workingGraphData
                 let NewLogData: LogData = {
                     humidity: NewData.data.humidity,
                     temperature: NewData.data.temperature,
